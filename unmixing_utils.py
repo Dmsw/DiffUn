@@ -7,14 +7,6 @@ from pysptools.abundance_maps.amaps import NNLS
 
 _H_cache = None
 
-def drag_back(a):
-    minv = th.min(a, keepdim=True, dim=1)[0]
-    maxv = th.max(a, keepdim=True, dim=1)[0]
-    minv = th.minimum(th.zeros_like(minv, device=a.device), minv)
-    maxv = th.maximum(th.ones_like(maxv, device=a.device), maxv)
-    return (a - minv) / (maxv - minv)
-
-
 def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps"):
     W = W[:, 0]
     W = (W + 1)/2
@@ -28,11 +20,11 @@ def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps")
 
     H = solve_H(Y_masked, W_masked, t)
     N, R = H.shape
-    if type == "ddps":
+    if type == "dmps":
         grad = H.T @ th.inverse(var*th.eye(N, device=H.device)+(1-bar_alpha)/bar_alpha * H@H.T)/np.sqrt(bar_alpha) @ (Y - H@W) * (1-alpha)/np.sqrt(alpha)/2
         A = Y_masked - H @ W_masked
         delta = th.tensor(1.75)
-    elif type == "dps":
+    elif type == "diffUn":
         HT = H.T
         grad = HT @ (Y_masked - H @ W_masked)
         A = Y_masked - H @ W_masked
@@ -49,16 +41,6 @@ def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps")
     log = {'res': th.norm(A).item(), "H": H.cpu().numpy(), "W": W.cpu().numpy()}
     return grad, H, log
 
-def library_match(W, A):
-    W = W[:, 0]
-    W = (W + 1)/2
-    sad_matrix = np.zeros([W.shape[0]])
-    for i in range(sad_matrix.shape[0]):
-        sad_matrix[i] = th.argmin(th.arccos(W[i] @ A.T / th.norm(W[i]+1e-9)/th.norm(A, dim=1)))
-        W[i] = A[int(sad_matrix[i])]
-    W = W * 2 - 1
-    return W[:, None]
-
 
 def solve_H(Y, W, t, __cache_H=True):
     global _H_cache
@@ -72,109 +54,6 @@ def solve_H(Y, W, t, __cache_H=True):
     else:
         H = _H_cache
     return th.from_numpy(H).float().to(Y.device)
-
-
-def solve_H1(Y, W, t):
-    R = W.shape[0]
-    N = Y.shape[0]
-    tilde_W = W
-    tilde_Y = Y
-    l = 1e-5
-    H = tilde_Y @ tilde_W.T @ th.inverse(tilde_W@tilde_W.T + th.eye(R, device=W.device)*l)
-    if t > 600:
-        idx = th.any(th.bitwise_or(H<0, H>1), dim=1)
-        num = th.sum(idx)
-        H[idx] = th.from_numpy(np.random.dirichlet([0.01]*R, num).astype(np.float32)).to(H.device)
-    if t > 50:
-        H -= 0.01
-
-    H[H<1e-5] = 1e-5
-    H[H>1] = 1
-    H = H / (th.sum(H, dim=1, keepdim=True)+1e-9)
-
-    return H
-
-def solve_H2(Y, W, t):
-    R = W.shape[0]
-    N = Y.shape[0]
-    tilde_W = W
-    tilde_Y = Y
-    l = 1e-5
-    H = tilde_Y @ tilde_W.T @ th.inverse(tilde_W@tilde_W.T + th.eye(R, device=W.device)*l)
-    if t > 50:
-        H -= 0.01
-    # H[H > 1] = 1
-    H[H<0] = 0
-    H = H / (th.sum(H, dim=1, keepdim=True)+1e-9)
-    H[H>1] = 0
-    return H
-
-
-def solve_H3(Y, W, t):
-    R = W.shape[0]
-    N = Y.shape[0]
-    tilde_W = W
-    tilde_Y = Y
-    l = 1e-5
-    H = tilde_Y @ tilde_W.T @ th.inverse(tilde_W@tilde_W.T + th.eye(R, device=W.device)*l)
-    # H = H / (th.amax(H, dim=1, keepdim=True) + 1e-9)
-    if t > 50:
-        # H -= 0.1
-        H -= 0.01
-    H[H<0] = 0
-    H[H>1] = 1
-    H = H / (th.sum(H, dim=1, keepdim=True)+1e-9)
-    H[H>1] = 1
-    return H
-
-
-def solve_H4(Y, W, t):
-    R = W.shape[0]
-    hat_H = Y @ th.pinverse(W)
-    bar_H = hat_H + (1-th.sum(hat_H, dim=1, keepdim=True))/R * th.ones_like(hat_H).to(W.device)
-    bar_H[bar_H < 0] = 0
-    H = bar_H / th.sum(bar_H, dim=1, keepdim=True)
-    return H
-
-
-def solve_H5(Y, W, t):
-    R = W.shape[0]
-    N = Y.shape[0]
-    C = Y.shape[1]
-    onesR = th.ones(R, device=W.device)
-    onesN = th.ones(N, device=W.device)
-    onesC = th.ones(C, device=W.device)
-    A = th.inverse(W @ W.T + th.eye(R, device=W.device) * 1e-6)
-    lam = (onesN - Y @ W.T @ A @ onesR) / (onesR @ A @ onesR)
-    H = Y @ W.T @ A + lam[:, None] @ (onesR @ A)[None]
-    H[H < 0] = 0
-    H = H / th.sum(H, dim=1, keepdim=True)
-    # H = bar_H / th.sum(bar_H, dim=1, keepdim=True)
-    return H
-
-
-def solve_H6(Y, W, t):
-    R = W.shape[0]
-    N = Y.shape[0]
-    tilde_W = W
-    tilde_Y = Y
-    l = 1e-5
-    H = tilde_Y @ tilde_W.T @ th.inverse(tilde_W@tilde_W.T + th.eye(R, device=W.device)*l)
-    H[H<0] = 0
-    H[H>1] = 1
-    if t > 50:
-        sum_H = th.mean(H, dim=0)
-        H[:, sum_H < 0.1] = 0
-    H = H / (th.sum(H, dim=1, keepdim=True)+1e-9)
-    H[H>1] = 0
-    return H
-
-
-def project_vect(vect):
-    R = vect.shape[1]
-    n = th.ones(1, R)/np.sqrt(R)
-    n = n.to(vect.device)
-    return vect - vect @ n.T * n
 
 
 def denoising_fn(sigma=1):
