@@ -10,7 +10,6 @@ _H_cache = None
 def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps"):
     W = W[:, 0]
     W = (W + 1)/2
-    # W = drag_back(W)
     if mask is None:
         W_masked = W
         Y_masked = Y
@@ -33,8 +32,6 @@ def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps")
         delta = delta* np.sqrt(bar_alpha)/2
     else:
         raise NotImplementedError
-    # delta = delta/2
-    # delta = 0.2 / th.norm(grad)
     assert not th.isnan(delta)
     grad = grad[:, None] * delta
     H = H[:, None]
@@ -45,10 +42,7 @@ def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps")
 def solve_H(Y, W, t, __cache_H=True):
     global _H_cache
     R = W.shape[0]
-    if t < 1 and False:
-        H = NNLS(Y.cpu().numpy(), W.cpu().numpy())
-        _H_cache = H
-    elif t % 5 == 0 or _H_cache is None or __cache_H is False:
+    if t % 5 == 0 or _H_cache is None or __cache_H is False:
         H = FCLS(Y.cpu().numpy(), W.cpu().numpy())
         _H_cache = H
     else:
