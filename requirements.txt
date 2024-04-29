@@ -1,0 +1,11 @@
+numpy
+matplotlib
+pysptools
+torch==1.12.1
+h5py
+scipy
+blobfile
+PyYAML
+mpi4py
+cvxopt
+tqdm

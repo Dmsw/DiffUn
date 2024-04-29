@@ -1,10 +1,12 @@
+import sys
+sys.path.append("./")
+
 import argparse
 
 import blobfile as bf
 import numpy as np
 import torch as th
 import yaml
-from functools import partial
 import matplotlib.pyplot as plt
 
 from guided_diffusion import dist_util, logger
@@ -15,7 +17,7 @@ from guided_diffusion.script_util import (
     add_dict_to_argparser,
 )
 
-from unmixing_utils import UnmixingUtils, cal_conditional_gradient_W, denoising_fn, vca
+from unmixing_utils import UnmixingUtils, denoising_fn
 
 
 def load_data(data_dir):
@@ -26,7 +28,7 @@ def load_data(data_dir):
     X = data["X"]
     A = data["A"]
     sigma = data["sigma"]
-    return {"ref_img": th.from_numpy(Y).to(dist_util.dev()).float()}, W, H, X, sigma, Y, th.from_numpy(A).to(dist_util.dev()).float()
+    return W, H, X, sigma, Y, th.from_numpy(A).to(dist_util.dev()).float()
 
 
 def main():
@@ -34,8 +36,8 @@ def main():
     if args.model_config is not None:
         upgrade_by_config(args)
 
-    dist_util.setup_dist(args.cuda)
-    filename = args.base_samples
+    dist_util.setup_dist()
+    filename = args.input_hsi
     filename = filename.split("/")[-1]
     filename = filename.split(".")[:-1]
     filename = ".".join(filename)
@@ -43,7 +45,7 @@ def main():
     logger.log(args)
 
     logger.log("creating model...")
-    model, diffusion = create_model_and_diffusion(
+    model, DiffUn = create_model_and_diffusion(
         **args_to_dict(args, model_and_diffusion_defaults().keys())
     )
     model.load_state_dict(
@@ -54,43 +56,21 @@ def main():
         model.convert_to_fp16()
     model.eval()
 
-    model_kwargs, W_t, H_t, X_t, sigma, Y, _ = load_data(args.base_samples)
+    W_t, H_t, X_t, sigma, Y, _ = load_data(args.input_hsi)
     hyper_utils = UnmixingUtils(W_t.T, H_t)
 
     logger.log("creating samples...")
-    repeat = 0
     SRE = 0
     R = 6
-    while repeat < 20:
-        W0, _, _ = vca(Y.T, R)
-        W0 = th.from_numpy(W0.T).to(dist_util.dev()).float()[:, None]
-        repeat += 1
-        _samplek, _H, log = diffusion.p_sample_loop(
-            model,
-            (R, 1, 224),
-            clip_denoised=args.clip_denoised,
-            model_kwargs=model_kwargs,
-            range_t=args.range_t,
-            progress=False,
-            logger=logger,
-            measure_sigma=sigma,
-            measurement=partial(cal_conditional_gradient_W, type="diffun"),
-            denoised_fn=denoising_fn(),
-            W0=W0,
-            t0=200,
-        )
-        _H = _H.cpu().detach().numpy()[:, 0]
-        _sample = _samplek.cpu().detach().numpy()[:, 0]
-        _sample = (_sample + 1)/2
-        _sre = 10*np.log10(np.sum((Y)**2)/np.sum((_H@_sample - Y)**2))
-        print(f"repeat {repeat}: {_sre}")
-        if _sre > SRE:
-            SRE = _sre
-            sample = _sample
-            H = _H
-
-    print("repeat", repeat)
-
+    
+    sample, H = DiffUn.unmixing(
+        model,
+        R,
+        224,
+        Y,
+        denoising_fn=denoising_fn(),
+    )
+    
     fig, axes = plt.subplots(1, 2, figsize=(12,5))
 
     Distance, meanDistance, P = hyper_utils.hyperSAD(sample.T)
@@ -99,7 +79,7 @@ def main():
     plt.savefig(bf.join(logger.get_dir(), f"W.png"), dpi=500)
     rmse = hyper_utils.hyperRMSE(H, P)
 
-    output_data = "L21: SAD ", str(meanDistance), str(Distance), "RMSE: ", str(rmse)
+    output_data = "L21: SAD ", str(meanDistance), str(Distance), "aRMSE: ", str(rmse)
     logger.log(output_data)
     SRE = 10*np.log10(np.sum((X_t)**2)/np.sum((H@sample - Y)**2))
     logger.log("SNR: ", SRE)
@@ -116,14 +96,13 @@ def create_argparser():
         clip_denoised=True,
         range_t=0,
         use_ddim=False,
-        base_samples="",
+        input_hsi="",
         model_path="",
         save_dir="",
         model_config=None,
         save_latents=False,
         input_size=512,
         dmps=False,
-        cuda=0,
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

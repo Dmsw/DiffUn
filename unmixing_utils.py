@@ -23,7 +23,7 @@ def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps")
         grad = H.T @ th.inverse(var*th.eye(N, device=H.device)+(1-bar_alpha)/bar_alpha * H@H.T)/np.sqrt(bar_alpha) @ (Y - H@W) * (1-alpha)/np.sqrt(alpha)/2
         A = Y_masked - H @ W_masked
         delta = th.tensor(1.75)
-    elif type == "diffUn":
+    elif type == "diffun":
         HT = H.T
         grad = HT @ (Y_masked - H @ W_masked)
         A = Y_masked - H @ W_masked

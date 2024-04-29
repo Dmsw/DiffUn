@@ -14,6 +14,9 @@ import torch as th
 
 from .nn import mean_flat, nan_mean_flat
 from .losses import normal_kl, discretized_gaussian_log_likelihood
+from unmixing_utils import UnmixingUtils, cal_conditional_gradient_W, vca
+from pysptools.abundance_maps.amaps import FCLS
+from functools import partial
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
@@ -439,6 +442,54 @@ class GaussianDiffusion:
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"], "mean": out["mean"], 'log_variance':out['log_variance']}
 
+    def unmixing(
+        self,
+        model,
+        R,
+        bands,
+        input_hsi,
+        gradient_type='diffun',
+        band_msak=None,
+        t0=200,
+        measure_sigma=0,
+        range_t=0,
+        clip_denoised=True,
+        progress=False,
+        K=5,
+        denoising_fn=None,
+    ):
+        device = next(model.parameters()).device
+        measure_fn = partial(cal_conditional_gradient_W, type=gradient_type)
+        sre = -np.inf
+        for repeat in range(K):
+            W0, _, _ = vca(input_hsi.T, R)
+            W0 = th.from_numpy(W0.T).to(device).float()[:, None]
+            _samplek, _H = self.p_sample_loop(
+                model,
+                (R, 1, bands),
+                clip_denoised=clip_denoised,
+                model_kwargs={"ref_img": th.from_numpy(input_hsi).to(device).float()},
+                range_t=range_t,
+                progress=False,
+                measure_sigma=measure_sigma,
+                measurement=measure_fn,
+                W0=W0,
+                t0=t0,
+                mask=band_msak,
+                denoised_fn=denoising_fn
+            )
+            _H = _H.cpu().detach().numpy()[:, 0]
+            _sample = _samplek.cpu().detach().numpy()[:, 0]
+            _sample = (_sample + 1)/2
+            _sre = 10*np.log10(np.sum((input_hsi)**2)/np.sum((_H@_sample - input_hsi)**2))
+            if progress:
+                print(f"Repeat {repeat+1}/{K}: SRE = {_sre}")
+            if _sre > sre:
+                sre = _sre
+                sample = _sample
+        H = FCLS(input_hsi, sample)
+        return sample, H
+
     def p_sample_loop(
         self,
         model,
@@ -560,7 +611,7 @@ class GaussianDiffusion:
                 )
 
                 if measurement is not None:
-                    g1, H = measurement(out["pred_xstart"], model_kwargs["ref_img"],
+                    g1, H, _ = measurement(out["pred_xstart"], model_kwargs["ref_img"],
                                                                 self.alphas_cumprod[i], 1-self.betas[i], noise_var, i, mask)
                 else:
                     g1 = 0

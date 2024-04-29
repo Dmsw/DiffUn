@@ -5,8 +5,6 @@ import torch.nn as nn
 import numpy as np
 import glob
 import random
-import cv2
-
 
 def weights_init_kaiming(m):
     classname = m.__class__.__name__
@@ -25,57 +23,6 @@ def set_random_set(seed):
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
     random.seed(seed)
-
-
-def calc_psnr(im, recon):
-    im = np.squeeze(im)
-    recon = np.squeeze(recon)
-    if im.ndim == 2:
-        mse = np.sum((im - recon) ** 2) / np.prod(im.shape)
-        max_val = 1.0  # np.max(im)
-        # max_val = np.max(im)
-        psnr = 10 * np.log10(max_val ** 2 / mse)
-        return psnr
-    elif im.ndim == 3:
-        c, w, h = im.shape
-        prod = w * h
-        mpsnr = 0.0
-        for i in range(c):
-            mse = np.sum((im[i] - recon[i]) ** 2) / prod
-            max_val = 1.0  # np.max(im)
-            # max_val = np.max(im)
-            mpsnr += 10 * np.log10(max_val ** 2 / mse)
-        return mpsnr / c
-
-
-def calc_ssim(im, recon):
-    def ssim(img1, img2):
-        C1 = (0.01) ** 2
-        C2 = (0.03) ** 2
-        img1 = img1.astype(np.float64)
-        img2 = img2.astype(np.float64)
-        kernel = cv2.getGaussianKernel(11, 1.5)
-        window = np.outer(kernel, kernel.transpose())
-        mu1 = cv2.filter2D(img1, -1, window)[5:-5, 5:-5]  # valid
-        mu2 = cv2.filter2D(img2, -1, window)[5:-5, 5:-5]
-        mu1_sq = mu1 ** 2
-        mu2_sq = mu2 ** 2
-        mu1_mu2 = mu1 * mu2
-        sigma1_sq = cv2.filter2D(img1 ** 2, -1, window)[5:-5, 5:-5] - mu1_sq
-        sigma2_sq = cv2.filter2D(img2 ** 2, -1, window)[5:-5, 5:-5] - mu2_sq
-        sigma12 = cv2.filter2D(img1 * img2, -1, window)[5:-5, 5:-5] - mu1_mu2
-        ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) *
-                                                                (sigma1_sq + sigma2_sq + C2))
-        return ssim_map.mean()
-
-    if im.ndim == 2:
-        return ssim(im, recon)
-    elif im.ndim == 3:
-        c, h, w = im.shape
-        mssim = 0.0
-        for i in range(c):
-            mssim += ssim(im[i], recon[i])
-        return mssim / c
 
 
 def reconsturction_loss(distance='l1'):

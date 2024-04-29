@@ -14,7 +14,7 @@ def diffusion_defaults():
     """
     return dict(
         learn_sigma=False,
-        diffusion_steps=3000,
+        diffusion_steps=1000,
         noise_schedule="linear",
         timestep_respacing="",
         use_kl=False,

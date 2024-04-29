@@ -1,4 +1,6 @@
 import argparse
+import sys
+sys.path.append("./")
 import scipy.io as scio
 
 import blobfile as bf
@@ -18,7 +20,7 @@ from guided_diffusion.script_util import (
 )
 from guided_diffusion.prior_model import PriorModel
 
-from unmixing_utils import UnmixingUtils, cal_conditional_gradient_W, vca
+from unmixing_utils import UnmixingUtils
 
 
 def setup_seed(seed):
@@ -37,14 +39,14 @@ def load_data(data_dir):
     X = data["X"]
     A = data["A"]
     sigma = data["sigma"]
-    return {"ref_img": th.from_numpy(Y).to(dist_util.dev()).float()}, W, H, X, sigma, Y, th.from_numpy(A).to(dist_util.dev()).float()
+    return W, H, X, sigma, Y, th.from_numpy(A).to(dist_util.dev()).float()
 
 
 def main():
     args = create_argparser().parse_args()
 
     dist_util.setup_dist()
-    filename = args.base_samples
+    filename = args.input_hsi
     filename = filename.split("/")[-1]
     filename = filename.split(".")[:-1]
     filename = ".".join(filename)
@@ -52,50 +54,26 @@ def main():
     logger.log(args)
 
     logger.log("creating model...")
-    diffusion = create_gaussian_diffusion(
+    DiffUn = create_gaussian_diffusion(
         **args_to_dict(args, diffusion_defaults().keys())
     )
 
-    model_kwargs, W_t, H_t, X_t, sigma, Y, library = load_data(args.base_samples)
-    model = PriorModel(library, diffusion.alphas_cumprod)
+    W_t, H_t, X_t, sigma, Y, library = load_data(args.input_hsi)
+    model = PriorModel(library, DiffUn.alphas_cumprod)
     model.to(dist_util.dev())
     model.eval()
 
     hyper_utils = UnmixingUtils(W_t.T, H_t)
 
-    logger.log("creating samples...")
-    repeat = 0
-    SRE = - np.inf
+    logger.log("unmixing...")
     R = W_t.shape[0]
-
-    while repeat < 20:
-        W0, _, _ = vca(Y.T, R)
-        W0 = th.from_numpy(W0.T).to(dist_util.dev()).float()[:, None]
-        repeat += 1
-        _samplek, _H = diffusion.p_sample_loop(
-            model,
-            (R, 1, 224),
-            clip_denoised=args.clip_denoised,
-            model_kwargs=model_kwargs,
-            range_t=args.range_t,
-            progress=False,
-            logger=logger,
-            measure_sigma=sigma,
-            measurement=partial(cal_conditional_gradient_W, type="diffun"),
-            W0=W0,
-            t0=200,
-        )
-        _H = _H.cpu().detach().numpy()[:, 0]
-        _sample = _samplek.cpu().detach().numpy()[:, 0]
-        _sample = (_sample + 1)/2
-        _sre = 10*np.log10(np.sum((Y)**2)/np.sum((_H@_sample - Y)**2))
-        print(f"repeat {repeat}: {_sre}")
-        if _sre > SRE:
-            SRE = _sre
-            sample = _sample
-            H = _H
-
-    print("repeat", repeat)
+    
+    sample, H = DiffUn.unmixing(
+        model,
+        R,
+        224,
+        Y,
+    )
 
     fig, axes = plt.subplots(1, 2, figsize=(12,5))
 
@@ -105,7 +83,7 @@ def main():
     plt.savefig(bf.join(logger.get_dir(), f"W.png"), dpi=500)
     rmse, armse = hyper_utils.hyperRMSE(H, P)
 
-    output_data = "L21: SAD ", str(meanDistance), str(Distance), "RMSE: ", str(armse), str(rmse)
+    output_data = "L21: SAD ", str(meanDistance), str(Distance), "aRMSE: ", str(armse), str(rmse)
     logger.log(output_data)
     SRE = 10*np.log10(np.sum((X_t)**2)/np.sum((H@sample - Y)**2))
     logger.log("SRE: ", SRE)
@@ -121,7 +99,7 @@ def create_argparser():
     defaults = dict(
         clip_denoised=True,
         range_t=0,
-        base_samples="",
+        input_hsi="",
         model_path="",
         save_dir="",
     )
