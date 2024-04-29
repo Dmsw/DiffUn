@@ -449,7 +449,7 @@ class GaussianDiffusion:
         bands,
         input_hsi,
         gradient_type='diffun',
-        band_msak=None,
+        band_mask=None,
         t0=200,
         measure_sigma=0,
         range_t=0,
@@ -457,9 +457,32 @@ class GaussianDiffusion:
         progress=False,
         K=5,
         denoising_fn=None,
+        cache_H=False,
     ):
+        """The reverse process for hyperspectral unmixing.
+
+        Args:
+            model (nn.Module): spectral denoising model
+            R (int): number of endmembers
+            bands (int): number of bands
+            input_hsi (np.ndarray): hyperspectral image with the shape of (bands, N)
+            gradient_type (str, optional): type of gradient. Defaults to 'diffun'.
+            band_mask (np.ndarray, optional): band mask to mask some noisy band. Defaults to None.
+            t0 (int, optional): starting of t0. Defaults to 200.
+            measure_sigma (float, optional): measure noise. Defaults to 0.
+            range_t (int, optional): end of caculating the gradient. Defaults to 0.
+            clip_denoised (bool, optional): clip the spectral to [0,1]. Defaults to True.
+            progress (bool, optional): output the message. Defaults to False.
+            K (int, optional): number of iteration. Defaults to 5.
+            denoising_fn (function, optional): additional spectral denoising function. Defaults to None.
+            cache_H (bool, optional): whether to cache to H. Setting to True for accelerating. Defaults to False.
+
+        Returns:
+            sample: Endmembers
+            H: Abundance maps
+        """
         device = next(model.parameters()).device
-        measure_fn = partial(cal_conditional_gradient_W, type=gradient_type)
+        measure_fn = partial(cal_conditional_gradient_W, type=gradient_type, __cache_H=cache_H)
         sre = -np.inf
         for repeat in range(K):
             W0, _, _ = vca(input_hsi.T, R)
@@ -475,7 +498,7 @@ class GaussianDiffusion:
                 measurement=measure_fn,
                 W0=W0,
                 t0=t0,
-                mask=band_msak,
+                mask=band_mask,
                 denoised_fn=denoising_fn
             )
             _H = _H.cpu().detach().numpy()[:, 0]

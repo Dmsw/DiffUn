@@ -7,7 +7,7 @@ sys.path.append("../")
 import argparse
 import yaml
 from guided_diffusion import dist_util, logger
-from guided_diffusion.image_datasets import load_spectral_data
+from guided_diffusion.spectral_datasets import load_spectral_data
 from guided_diffusion.resample import create_named_schedule_sampler
 from guided_diffusion.script_util import (
     model_and_diffusion_defaults,

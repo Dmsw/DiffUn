@@ -69,6 +69,8 @@ def main():
         224,
         Y,
         denoising_fn=denoising_fn(),
+        progress=True,
+        cache_H=args.cache_H,
     )
     
     fig, axes = plt.subplots(1, 2, figsize=(12,5))
@@ -100,9 +102,7 @@ def create_argparser():
         model_path="",
         save_dir="",
         model_config=None,
-        save_latents=False,
-        input_size=512,
-        dmps=False,
+        cache_H=False
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

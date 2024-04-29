@@ -1,0 +1,1 @@
+python scripts/train.py --data_dir data/A4_P1500.npz --batch_size 216 --mode train --save_interval 2000 --model_config ../config/model_config_1d.yaml --in_channels 1 --lr_anneal_steps 10000 --lr 1e-4 --resume_checkpoint "" --log_direct models/A4_P1500/

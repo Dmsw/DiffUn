@@ -1,1 +1,2 @@
-python scripts/DiffUn_wo.py --input_hsi data/A4_P1500.npz --save_dir "results/unmixing/" --range_t 0 --diffusion_steps 1000 --rescale_timesteps True --predict_xstart True --learn_sigma False
+python scripts/DiffUn_wo.py --input_hsi data/A4_P1500.npz --save_dir "results/unmixing/" --range_t 0 --diffusion_steps 1000 --rescale_timesteps True --predict_xstart True --learn_sigma False --cache_H False
+# setting --cache_H to be True for accelerating the computation

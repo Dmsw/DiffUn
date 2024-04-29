@@ -7,7 +7,7 @@ from pysptools.abundance_maps.amaps import NNLS
 
 _H_cache = None
 
-def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps"):
+def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps", __cache_H=False):
     W = W[:, 0]
     W = (W + 1)/2
     if mask is None:
@@ -17,7 +17,7 @@ def cal_conditional_gradient_W(W, Y, bar_alpha, alpha, var, t, mask, type="dps")
         W_masked = W[:, ~mask]
         Y_masked = Y
 
-    H = solve_H(Y_masked, W_masked, t)
+    H = solve_H(Y_masked, W_masked, t, __cache_H=__cache_H)
     N, R = H.shape
     if type == "dmps":
         grad = H.T @ th.inverse(var*th.eye(N, device=H.device)+(1-bar_alpha)/bar_alpha * H@H.T)/np.sqrt(bar_alpha) @ (Y - H@W) * (1-alpha)/np.sqrt(alpha)/2
@@ -148,7 +148,7 @@ class UnmixingUtils:
 
 
 def analyse(W, dir):
-    from guided_diffusion.image_datasets import _list_spectral_files, load_spectral_from_txts
+    from guided_diffusion.spectral_datasets import _list_spectral_files, load_spectral_from_txts
     path = np.array(_list_spectral_files(dir))
     A = load_spectral_from_txts(path, False)
     A = A[~np.any(np.isnan(A), axis=1)]

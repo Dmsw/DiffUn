@@ -73,6 +73,8 @@ def main():
         R,
         224,
         Y,
+        cache_H=args.cache_H,
+        progress=True,
     )
 
     fig, axes = plt.subplots(1, 2, figsize=(12,5))
@@ -102,6 +104,7 @@ def create_argparser():
         input_hsi="",
         model_path="",
         save_dir="",
+        cache_H=False,
     )
     defaults.update(diffusion_defaults())
     parser = argparse.ArgumentParser()
