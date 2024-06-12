@@ -22,3 +22,17 @@ scripts/
     train.py
 unmixing_utils.py                   # some auxiliary function for unmixing
 ```
+
+```shell
+@ARTICLE{10545540,
+  author={Deng, Keli and Qian, Yuntao and Nie, Jie and Zhou, Jun},
+  journal={IEEE Transactions on Geoscience and Remote Sensing}, 
+  title={Diffusion Model Based Hyperspectral Unmixing Using Spectral Prior Distribution}, 
+  year={2024},
+  volume={},
+  number={},
+  pages={1-1},
+  keywords={Libraries;Hyperspectral imaging;Image restoration;Noise;Task analysis;Probabilistic logic;Noise reduction;Hyperspectral unmixing;diffusion model;spectral library},
+  doi={10.1109/TGRS.2024.3408475}}
+
+```
